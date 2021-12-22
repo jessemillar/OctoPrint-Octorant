@@ -41,6 +41,12 @@
                 <input type="checkbox" data-bind="checked: $parent.settings.plugins.octorant.events[$data].with_snapshot"/>
             </div>
         </div>
+        <div class="control-group" data-bind="if: $parent.settings.plugins.octorant.events[$data].temperature">
+            <label class="control-label">{{ _("Notify when bed temperature reaches") }}</label>
+            <div class="controls">
+                <input type="number" min="1" max="100" step="0.5" data-bind="value: $parent.settings.plugins.octorant.events[$data].temperature"/>C
+            </div>
+        </div>
         <div class="control-group" data-bind="if: $parent.settings.plugins.octorant.events[$data].step">
             <label class="control-label">{{ _("Notify every") }}</label>
             <div class="controls">

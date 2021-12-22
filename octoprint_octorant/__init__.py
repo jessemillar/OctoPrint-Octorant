@@ -106,7 +106,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 				"name" : "Bed cooled",
 				"enabled" : True,
 				"with_snapshot": True,
-				"message" : "❄️  The bed is cool!",
+				"message" : "❄️ The bed is cool!",
 				"temperature" : 25,
 			},
 			"test":{ # Not a real message, but we will treat it as one
@@ -198,7 +198,6 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 
 		if event == "PrintStarted":
 			self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
-			self.stop_bed_temperature_timer()
 			return self.notify_event("printing_started",payload)
 		if event == "PrintPaused":
 			return self.notify_event("printing_paused",payload)
@@ -393,7 +392,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		return out
 
 	def start_bed_temperature_timer(self):
-		self.bedTemperatureTimer = RepeatedTimer(1, self.check_bed_temperature, run_first=True)
+		self.bedTemperatureTimer = RepeatedTimer(3, self.check_bed_temperature, run_first=True)
 		self.bedTemperatureTimer.start()
 
 	def stop_bed_temperature_timer(self):
