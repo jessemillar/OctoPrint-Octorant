@@ -205,6 +205,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
 			return self.notify_event("printing_resumed",payload)
 		if event == "PrintCancelled":
+			self.start_bed_temperature_timer()
 			return self.notify_event("printing_cancelled",payload)
 
 		if event == "PrintDone":
