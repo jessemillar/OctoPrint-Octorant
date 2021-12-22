@@ -198,6 +198,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 
 		if event == "PrintStarted":
 			self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
+			self.stop_bed_temperature_timer()
 			return self.notify_event("printing_started",payload)
 		if event == "PrintPaused":
 			return self.notify_event("printing_paused",payload)
@@ -396,7 +397,8 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		self.bedTemperatureTimer.start()
 
 	def stop_bed_temperature_timer(self):
-		self.bedTemperatureTimer.cancel()
+		if self.bedTemperatureTimer is not None:
+			self.bedTemperatureTimer.cancel()
 
 	def check_bed_temperature(self):
 		self._logger.debug("Checking bed temperature...")
