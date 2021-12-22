@@ -5,6 +5,7 @@ from .discord import Hook
 import octoprint.plugin
 import octoprint.settings
 import octoprint.printer
+from octoprint.util import RepeatedTimer
 import requests
 from datetime import timedelta
 from datetime import datetime
@@ -25,6 +26,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		# Events definition here (better for intellisense in IDE)
 		# referenced in the settings too.
 		self.lastProgressNotificationTimestamp = datetime.now(timezone.utc),
+		self.bedTemperatureTimer = None,
 		self.events = {
 			"startup" : {
 				"name" : "Octoprint Startup",
@@ -99,6 +101,13 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 				"message" : "📢 Printing is at {progress}%",
 				"timeStep" : 10,
 				"step" : 10
+			},
+			"bed_cooled":{
+				"name" : "Bed cooled",
+				"enabled" : True,
+				"with_snapshot": True,
+				"message" : "❄️  The bed is cool!",
+				"temperature" : 25,
 			},
 			"test":{ # Not a real message, but we will treat it as one
 				"enabled" : True,
@@ -200,6 +209,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 
 		if event == "PrintDone":
 			payload['time_formatted'] = str(timedelta(seconds=int(payload["time"])))
+			self.start_bed_temperature_timer()
 			return self.notify_event("printing_done", payload)
 
 		return True
@@ -223,7 +233,6 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		if(old_bot_settings != new_bot_settings):
 			self._logger.info("Settings have changed. Send a test message...")
 			self.notify_event("test")
-
 
 	def notify_event(self,eventID,data={}):
 		if(eventID not in self.events):
@@ -249,20 +258,20 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 				return False # Don't notify
 
 			estimatedPrintTimeMinutes = self._printer.get_current_job()["estimatedPrintTime"]/60
-			self._logger.info("Estimated print time in minutes is " + str(estimatedPrintTimeMinutes))
+			self._logger.debug("Estimated print time in minutes is " + str(estimatedPrintTimeMinutes))
 			if (estimatedPrintTimeMinutes is not None and estimatedPrintTimeMinutes/(100/int(tmpConfig["step"])) > float(tmpConfig["timeStep"])):
-				self._logger.info("Checking if we need to notify based on minutes passed")
+				self._logger.debug("Checking if we need to notify based on minutes passed")
 				# Notify if it's been a while since our last notification (timeStep)
 				if (datetime.now(timezone.utc)-self.lastProgressNotificationTimestamp).total_seconds()/60 >= int(tmpConfig["timeStep"]):
-					self._logger.info("Alerting because of minutes passed")
+					self._logger.debug("Alerting because of minutes passed")
 					# Reset the "timer" since we're about to send a progress notification
 					self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
 				else:
-					self._logger.info("Time alert not ready yet")
+					self._logger.debug("Time alert not ready yet")
 					return False # Don't notify
 			# Notify only if we're at a configured notification percentage (step)
 			elif (int(data["progress"]) % int(tmpConfig["step"]) != 0):
-				self._logger.info("Percentage progress alert not ready yet")
+				self._logger.debug("Percentage progress alert not ready yet")
 				return False # Don't notify
 
 		tmpDataFromPrinter = self._printer.get_current_data()
@@ -312,7 +321,6 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._logger.debug("{}:{} > Output: '{}'".format(eventName, which, out))
 			return out
 
-
 	def send_message(self, eventID, message, withSnapshot=False):
 
 		# return false if no URL is provided
@@ -358,7 +366,6 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 
 						snapshotImage = newImage
 
-
 					snapshot = {'file': ("snapshot.png", snapshotImage.getvalue())}
 			except requests.ConnectionError:
 				snapshot = None
@@ -382,6 +389,25 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		self.exec_script(eventID, "after")
 
 		return out
+
+	def start_bed_temperature_timer(self):
+		self.bedTemperatureTimer = RepeatedTimer(1, self.check_bed_temperature, run_first=True)
+		self.bedTemperatureTimer.start()
+
+	def stop_bed_temperature_timer(self):
+		self.bedTemperatureTimer.cancel()
+
+	def check_bed_temperature(self):
+		thresholdTemperature = int(self._settings.get(["events", "bed_cooled"],merged=True)["temperature"])
+		currentTemperatures = self._printer.get_current_temperatures()
+
+		if "bed" in currentTemperatures:
+			bedTemperature = currentTemperatures["bed"]["actual"]
+			self._logger.debug("Current bed temperature: " + str(bedTemperature))
+			if bedTemperature <= thresholdTemperature:
+				self._logger.debug("Bed is cool")
+				# TODO: Send notification
+				self.stop_bed_temperature_timer()
 
 # If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
 # ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
