@@ -1,19 +1,21 @@
 # coding=utf-8
 from __future__ import absolute_import
-from .discord import Hook
 
 import octoprint.plugin
 import octoprint.settings
 import octoprint.printer
 from octoprint.util import RepeatedTimer
 import requests
+import subprocess
+import os
+
 from datetime import timedelta
 from datetime import datetime
 from datetime import timezone
 from PIL import Image
 from io import BytesIO
-import subprocess
-import os
+from .discord import DiscordMessage
+from .events import EVENTS, CATEGORIES
 
 class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			octoprint.plugin.StartupPlugin,
@@ -23,101 +25,11 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			octoprint.plugin.ProgressPlugin):
 
 	def __init__(self):
-		# Events definition here (better for intellisense in IDE)
-		# referenced in the settings too.
 		self.lastProgressNotificationTimestamp = datetime.now(timezone.utc),
-		self.bedTemperatureTimer = None,
-		self.events = {
-			"startup" : {
-				"name" : "Octoprint Startup",
-				"enabled" : True,
-				"with_snapshot": False,
-				"message" : "⏰ I just woke up! What are we gonna print today?"
-			},
-			"shutdown" : {
-				"name" : "Octoprint Shutdown",
-				"enabled" : True,
-				"with_snapshot": False,
-				"message" : "💤 Going to bed now!"
-			},
-			"printer_state_operational":{
-				"name" : "Printer state : operational",
-				"enabled" : True,
-				"with_snapshot": False,
-				"message" : "✅ Your printer is operational."
-			},
-			"printer_state_error":{
-				"name" : "Printer state : error",
-				"enabled" : True,
-				"with_snapshot": False,
-				"message" : "⚠️ Your printer is in an erroneous state."
-			},
-			"printer_state_unknown":{
-				"name" : "Printer state : unknown",
-				"enabled" : True,
-				"with_snapshot": False,
-				"message" : "❔ Your printer is in an unknown state."
-			},
-			"printing_started":{
-				"name" : "Printing process : started",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "🖨️ I've started printing **{name}**"
-			},
-			"printing_paused":{
-				"name" : "Printing process : paused",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "⏸️ The printing was paused."
-			},
-			"printing_resumed":{
-				"name" : "Printing process : resumed",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "▶️ The printing was resumed."
-			},
-			"printing_cancelled":{
-				"name" : "Printing process : cancelled",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "🛑 The printing was stopped."
-			},
-			"printing_done":{
-				"name" : "Printing process : done",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "👍 Printing is done! Took about {time_formatted}"
-			},
-			"printing_failed":{
-				"name" : "Printing process : failed",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "👎 Printing has failed! :("
-			},
-			"printing_progress":{
-				"name" : "Printing progress",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "📢 Printing is at {progress}%",
-				"timeStep" : 10,
-				"step" : 10
-			},
-			"bed_cooled":{
-				"name" : "Bed cooled",
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "❄️ The print bed is cool!",
-				"temperature" : 30,
-			},
-			"test":{ # Not a real message, but we will treat it as one
-				"enabled" : True,
-				"with_snapshot": True,
-				"message" : "Hello hello! If you see this message, it means that the settings are correct!"
-			},
-		}
+		self.events = EVENTS
 
 	def on_after_startup(self):
-		self._logger.info("Octorant is started !")
+		self._logger.info("OctoRant is started !")
 
 	##~~ SettingsPlugin mixin
 
@@ -126,6 +38,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			'url': "",
 			'username': "",
 			'avatar': "",
+			'categories': CATEGORIES,
 			'events' : self.events,
 			'allow_scripts': False,
 			'script_before': '',
@@ -164,7 +77,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		# for details.
 		return dict(
 			octorant=dict(
-				displayName="Octorant Plugin",
+				displayName="OctoRant Plugin",
 				displayVersion=self._plugin_version,
 
 				# version check: github repository
@@ -246,12 +159,19 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._logger.debug("Event {} is not enabled. Returning gracefully".format(eventID))
 			return False
 
+		# Setup default values
+		data.setdefault("progress",0)
+		data.setdefault("remaining",0)
+		data.setdefault("remaining_formatted","0s")
+		data.setdefault("spent",0)
+		data.setdefault("spent_formatted","0s")
+
 		# Special case for progress eventID : we check for progress and steps
 		if eventID == 'printing_progress':
 			if (\
 				# Check that both step config values aren't unset
 				int(tmpConfig["step"]) == 0 \
-				and int(tmpConfig["timeStep"]) == 0 \
+				and int(tmpConfig["time_step"]) == 0 \
 				# Don't notify about progress on 0% or 100% because other notifications fire then
 				or int(data["progress"]) == 0 \
 				or (int(data["progress"]) == 100) \
@@ -259,12 +179,21 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 				return False # Don't notify
 
 			estimatedPrintTimeMinutes = self._printer.get_current_job()["estimatedPrintTime"]/60
+<<<<<<< HEAD
 			self._logger.debug("Estimated print time in minutes is " + str(estimatedPrintTimeMinutes))
 			if (estimatedPrintTimeMinutes is not None and estimatedPrintTimeMinutes/(100/int(tmpConfig["step"])) > float(tmpConfig["timeStep"])):
 				self._logger.debug("Checking if we need to notify based on minutes passed")
 				# Notify if it's been a while since our last notification (timeStep)
 				if (datetime.now(timezone.utc)-self.lastProgressNotificationTimestamp).total_seconds()/60 >= int(tmpConfig["timeStep"]):
 					self._logger.debug("Alerting because of minutes passed")
+=======
+			self._logger.info("Estimated print time in minutes is " + str(estimatedPrintTimeMinutes))
+			if (estimatedPrintTimeMinutes is not None and estimatedPrintTimeMinutes/(100/int(tmpConfig["step"])) > float(tmpConfig["time_step"])):
+				self._logger.info("Checking if we need to notify based on minutes passed")
+				# Notify if it's been a while since our last notification (time_step)
+				if (datetime.now(timezone.utc)-self.lastProgressNotificationTimestamp).total_seconds()/60 >= int(tmpConfig["time_step"]):
+					self._logger.info("Alerting because of minutes passed")
+>>>>>>> master
 					# Reset the "timer" since we're about to send a progress notification
 					self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
 				else:
@@ -288,7 +217,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			message = tmpConfig["message"].format(**data)
 		except KeyError as error:
 			message = tmpConfig["message"] + \
-				"""\r\n:sos: **Octorant Warning**""" + \
+				"""\r\n:sos: **OctoRant Warning**""" + \
 				"""\r\n The variable `{""" +  error.args[0] +"""}` is invalid for this message: """ + \
 				"""\r\n Available variables: `{""" + '}`, `{'.join(list(data)) +"}`"
 		finally:
@@ -368,15 +297,16 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 						snapshotImage = newImage
 
 					snapshot = {'file': ("snapshot.png", snapshotImage.getvalue())}
-			except requests.ConnectionError:
-				snapshot = None
-				self._logger.error("{}: ConnectionError on: '{}'".format(eventID, snapshotUrl))
+
 			except requests.ConnectTimeout:
 				snapshot = None
 				self._logger.error("{}: ConnectTimeout on: '{}'".format(eventID, snapshotUrl))
+			except requests.ConnectionError:
+				snapshot = None
+				self._logger.error("{}: ConnectionError on: '{}'".format(eventID, snapshotUrl))
 
 		# Send to Discord WebHook
-		discordCall = Hook(
+		discordMsg = DiscordMessage(
 			self._settings.get(["url"], merged=True),
 			message,
 			self._settings.get(["username"],merged=True),
@@ -384,12 +314,12 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			snapshot
 		)
 
-		out = discordCall.start()
+		discordMsg.start()
 
 		# exec "after" script if any
 		self.exec_script(eventID, "after")
 
-		return out
+		return True
 
 	def start_bed_temperature_timer(self):
 		self.bedTemperatureTimer = RepeatedTimer(3, self.check_bed_temperature, run_first=True)
