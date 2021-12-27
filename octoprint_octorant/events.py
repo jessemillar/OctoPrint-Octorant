@@ -36,6 +36,15 @@ EVENTS = {
         "with_snapshot": False,
         "message" : "❔ Your printer is in an unknown state."
     },
+    "bed_cooled":{
+        "category": "printer",
+        "name" : "Bed cooled",
+        "enabled" : True,
+        "with_snapshot": True,
+        "message" : "❄️ The print bed is cool!",
+        "temperature" : 30,
+        "temperature_unit" : "C"
+    },
     "printing_started":{
         "category": "prints",
         "name" : "Printing process : started",
@@ -88,13 +97,6 @@ EVENTS = {
         "time_step_unit":"minute(s)",
         "step" : 10,
         "step_unit":"%"
-    },
-    "bed_cooled":{
-        "name" : "Bed cooled",
-        "enabled" : True,
-        "with_snapshot": True,
-        "message" : "❄️ The print bed is cool!",
-        "temperature" : 30,
     },
     "test":{ # Not a real message, but we will treat it as one
         "category": "test",
