@@ -89,6 +89,13 @@ EVENTS = {
         "step" : 10,
         "step_unit":"%"
     },
+    "bed_cooled":{
+        "name" : "Bed cooled",
+        "enabled" : True,
+        "with_snapshot": True,
+        "message" : "❄️ The print bed is cool!",
+        "temperature" : 30,
+    },
     "test":{ # Not a real message, but we will treat it as one
         "category": "test",
         "name": "Test message",
