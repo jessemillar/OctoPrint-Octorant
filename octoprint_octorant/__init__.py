@@ -313,6 +313,9 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		return True
 
 	def start_bed_temperature_timer(self):
+		if self.bedTemperatureTimer is not None:
+			self.bedTemperatureTimer.cancel()
+
 		self.bedTemperatureTimer = RepeatedTimer(3, self.check_bed_temperature, run_first=True)
 		self.bedTemperatureTimer.start()
 
