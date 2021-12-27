@@ -330,8 +330,8 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._logger.debug("Current bed temperature: " + str(bedTemperature))
 			if bedTemperature <= thresholdTemperature:
 				self._logger.debug("Bed is cool")
-				self.bedTemperatureTimer.cancel()
 				self.notify_event("bed_cooled")
+				self.bedTemperatureTimer.cancel()
 
 # If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
 # ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
