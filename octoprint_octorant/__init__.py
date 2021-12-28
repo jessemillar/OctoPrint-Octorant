@@ -26,6 +26,7 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def __init__(self):
 		self.lastProgressNotificationTimestamp = datetime.now(timezone.utc),
+		self.bedTemperatureTimer = None
 		self.events = EVENTS
 
 	def on_after_startup(self):
@@ -120,12 +121,10 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		if event == "PrintCancelled":
 			self.start_bed_temperature_timer()
 			return self.notify_event("printing_cancelled",payload)
-
 		if event == "PrintDone":
 			payload['time_formatted'] = str(timedelta(seconds=int(payload["time"])))
 			self.start_bed_temperature_timer()
 			return self.notify_event("printing_done", payload)
-
 		return True
 
 	def on_print_progress(self,location,path,progress):
