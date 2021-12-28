@@ -84,8 +84,6 @@ EVENTS = {
         "enabled" : True,
         "with_snapshot": True,
         "message" : "📢 Printing is at {progress}%",
-        "time_step" : 10,
-        "time_step_unit":"minute(s)",
         "step" : 10,
         "step_unit":"%"
     },

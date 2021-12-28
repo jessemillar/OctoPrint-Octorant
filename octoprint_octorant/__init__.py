@@ -10,8 +10,6 @@ import subprocess
 import os
 
 from datetime import timedelta
-from datetime import datetime
-from datetime import timezone
 from PIL import Image
 from io import BytesIO
 from .discord import DiscordMessage
@@ -25,7 +23,6 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 			octoprint.plugin.ProgressPlugin):
 
 	def __init__(self):
-		self.lastProgressNotificationTimestamp = datetime.now(timezone.utc),
 		self.bedTemperatureTimer = None
 		self.events = EVENTS
 
@@ -111,12 +108,10 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 				return self.notify_event("printer_state_unknown")
 
 		if event == "PrintStarted":
-			self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
 			return self.notify_event("printing_started",payload)
 		if event == "PrintPaused":
 			return self.notify_event("printing_paused",payload)
 		if event == "PrintResumed":
-			self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
 			return self.notify_event("printing_resumed",payload)
 		if event == "PrintCancelled":
 			self.start_bed_temperature_timer()
@@ -166,33 +161,13 @@ class OctorantPlugin(octoprint.plugin.EventHandlerPlugin,
 		data.setdefault("spent_formatted","0s")
 
 		# Special case for progress eventID : we check for progress and steps
-		if eventID == 'printing_progress':
-			if (\
-				# Check that both step config values aren't unset
-				int(tmpConfig["step"]) == 0 \
-				and int(tmpConfig["time_step"]) == 0 \
-				# Don't notify about progress on 0% or 100% because other notifications fire then
-				or int(data["progress"]) == 0 \
-				or (int(data["progress"]) == 100) \
-			):
-				return False # Don't notify
-
-			estimatedPrintTimeMinutes = self._printer.get_current_job()["estimatedPrintTime"]/60
-			self._logger.info("Estimated print time in minutes is " + str(estimatedPrintTimeMinutes))
-			if (estimatedPrintTimeMinutes is not None and estimatedPrintTimeMinutes/(100/int(tmpConfig["step"])) > float(tmpConfig["time_step"])):
-				self._logger.info("Checking if we need to notify based on minutes passed")
-				# Notify if it's been a while since our last notification (time_step)
-				if (datetime.now(timezone.utc)-self.lastProgressNotificationTimestamp).total_seconds()/60 >= int(tmpConfig["time_step"]):
-					self._logger.info("Alerting because of minutes passed")
-					# Reset the "timer" since we're about to send a progress notification
-					self.lastProgressNotificationTimestamp = datetime.now(timezone.utc)
-				else:
-					self._logger.debug("Time alert not ready yet")
-					return False # Don't notify
-			# Notify only if we're at a configured notification percentage (step)
-			elif (int(data["progress"]) % int(tmpConfig["step"]) != 0):
-				self._logger.debug("Percentage progress alert not ready yet")
-				return False # Don't notify
+		if eventID == 'printing_progress' and (\
+			int(tmpConfig["step"]) == 0 \
+			or int(data["progress"]) == 0 \
+			or int(data["progress"]) % int(tmpConfig["step"]) != 0 \
+			or (int(data["progress"]) == 100) \
+		) :
+			return False
 
 		tmpDataFromPrinter = self._printer.get_current_data()
 		if tmpDataFromPrinter["progress"] is not None and tmpDataFromPrinter["progress"]["printTimeLeft"] is not None:
